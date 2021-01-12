@@ -186,7 +186,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     args.extent = args.extent[0]
     
-    if args.verbose and args.print_only
+    if args.verbose and args.print_only: print('PRINT ONLY')
 
     # temp directory
     args.tmp_d = tempfile.mkdtemp()
