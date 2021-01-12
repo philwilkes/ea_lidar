@@ -21,7 +21,6 @@ import urllib.request
 from tqdm.auto import tqdm
 
 
-
 def download_tile(zipf, download=False, product='LIDAR Point Cloud', 
                   verbose=True, download_dir=False, headerless=True,
                   browser='chrome', year='latest', all_years=False,
@@ -29,17 +28,20 @@ def download_tile(zipf, download=False, product='LIDAR Point Cloud',
     
     if browser == 'firefox':
         from selenium.webdriver.firefox.options import Options
-        from selenium.webdriver.firefox.firefox_binary import FirefoxBinary
-        from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+        # you may need to import these as well
+#         from selenium.webdriver.firefox.firefox_binary import FirefoxBinary
+#         from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
         
         options = Options()
         options.headless = headerless
-        cap = DesiredCapabilities().FIREFOX
-        cap["marionette"] = True
-        binary = FirefoxBinary('/Users/phil/anaconda2/envs/networkx/bin/firefox')
-        driver = webdriver.Firefox(executable_path='/Users/phil/anaconda2/envs/networkx/bin/geckodriver',
-                                   capabilities=cap,
-                                   firefox_binary=binary)
+        # you may need to set capabilities and loc of binary
+#         cap = DesiredCapabilities().FIREFOX
+#         cap["marionette"] = True
+#         binary = FirefoxBinary('/Users/phil/anaconda2/envs/networkx/bin/firefox')
+#         driver = webdriver.Firefox(executable_path='/Users/phil/anaconda2/envs/networkx/bin/geckodriver',
+#                                    capabilities=cap,
+#                                    firefox_binary=binary)
+        driver = webdriver.Firefox(options=options)
     else:
         from selenium.webdriver.chrome.options import Options
         import chromedriver_binary
@@ -112,9 +114,8 @@ def download_tile(zipf, download=False, product='LIDAR Point Cloud',
             except:
                 if verbose and not print_only: print(linki - 1, 'files downloaded for {}'.format(current))
                 break
-
-
-            
+                
+                
 class DownloadProgressBar(tqdm):
     
     def update_to(self, b=1, bsize=1, tsize=None):
@@ -161,6 +162,7 @@ def tile_input(shp, args):
                           browser=args.browser,
                           verbose=args.verbose)
             break
+    driver.close()
     
 
 if __name__ == '__main__':
@@ -168,7 +170,7 @@ if __name__ == '__main__':
     # some arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('extent', type=str, nargs=1, help='path to extent')
-    parser.add_argument('--print-only', action='store_false', help='print list of available data')
+    parser.add_argument('--print-only', action='store_true', help='print list of available data')
     parser.add_argument('--odir', type=str, nargs=1, help='directory to store tiles')
     parser.add_argument('--product', '-p', type=str, default='LIDAR Composite DTM',
                         help='choose from "LIDAR Composite DSM", "LIDAR Composite DTM", \
@@ -183,6 +185,8 @@ if __name__ == '__main__':
     parser.add_argument('--verbose', action='store_true', help='print something')
     args = parser.parse_args()
     args.extent = args.extent[0]
+    
+    if args.verbose and args.print_only
 
     # temp directory
     args.tmp_d = tempfile.mkdtemp()
@@ -195,6 +199,7 @@ if __name__ == '__main__':
         if args.verbose: 'input geometry is large and or complex, tiling data.'
         tile_input(shp, args)
     else:
+        
         with ZipFile(os.path.join(args.tmp_d, args.tmp_n + '.zip'), 'w') as zipObj: 
             [zipObj.write(f) for f in glob.glob(os.path.splitext(args.extent)[0] + '*')]
         
