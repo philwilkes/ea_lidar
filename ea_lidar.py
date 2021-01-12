@@ -156,23 +156,19 @@ class YearError(Exception):
 
 def tile_input(shp, args):
     
-    osgb = gp.read_file('/Users/phil/python/ea_lidar/shp/OSGB_Grid_5km.shp')
+    osgb = gp.read_file(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'shp', 'OSGB_Grid_5km.shp'))
     osgb_sindex = osgb.sindex
     tile_index = [list(osgb_sindex.intersection(row.geometry.bounds)) for row in shp.itertuples()][0]
     for idx in tile_index:
-        tmp_shp = gp.GeoDataFrame(geometry=[osgb.loc[idx].geometry])
+        tmp_shp = gp.GeoDataFrame(geometry=[osgb.loc[idx].geometry], crs='EPSG:27700')
         if tmp_shp.intersects(shp).values[0]:
             tile_tmp = os.path.join(args.tmp_d, '{}_{}'.format(args.tmp_n, idx))
             gp.GeoDataFrame(geometry=[osgb.loc[idx].geometry]).to_file(tile_tmp + '.shp')
             with ZipFile(os.path.join(args.tmp_d, tile_tmp + '.zip'), 'w') as zipObj: 
                 [zipObj.write(f) for f in glob.glob(tile_tmp + '*')]
-            print(args.tmp_d)
-            import sys
-
-            sys.exit()
             driver = download_tile(tile_tmp + '.zip',
                                    product_list=args.required_products,
-                                   headless=False,
+                                   headless=True,
                                    year=args.year,
                                    all_years=args.all_years,
                                    browser=args.browser,
@@ -183,7 +179,7 @@ def tile_input(shp, args):
     
 
 if __name__ == '__main__':
-    
+   
     # some arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('extent', type=str, help='path to extent')
@@ -218,7 +214,7 @@ if __name__ == '__main__':
 
     shp = gp.read_file(args.extent)
     
-    if shp.area.values[0] > 10*5000**2 or num_vertices(shp) > 1000:
+    if shp.area.values[0] > 20*5000**2 or num_vertices(shp) > 1000:
         if args.verbose: 'input geometry is large and or complex, tiling data.'
         tile_input(shp, args)
     else:
