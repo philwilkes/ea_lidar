@@ -16,13 +16,12 @@ from selenium.webdriver.common.by import By
 
 from selenium.common.exceptions import ElementNotInteractableException, TimeoutException
 
-
 import urllib.request
 from tqdm.auto import tqdm
 
 
 def download_tile(zipf, download=False, product='LIDAR Point Cloud', 
-                  verbose=True, download_dir=False, headerless=True,
+                  verbose=True, download_dir=False, headless=True,
                   browser='chrome', year='latest', all_years=False,
                   print_only=True):
     
@@ -33,8 +32,8 @@ def download_tile(zipf, download=False, product='LIDAR Point Cloud',
 #         from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
         
         options = Options()
-        options.headless = headerless
-        # you may need to set capabilities and loc of binary
+        options.headless = headless
+        # you may need to set capabilities and location of binary
 #         cap = DesiredCapabilities().FIREFOX
 #         cap["marionette"] = True
 #         binary = FirefoxBinary('/Users/phil/anaconda2/envs/networkx/bin/firefox')
@@ -47,7 +46,7 @@ def download_tile(zipf, download=False, product='LIDAR Point Cloud',
         import chromedriver_binary
         
         options = Options()
-        options.headless = headerless
+        options.headless = headless
         driver = webdriver.Chrome(chromedriver_binary.chromedriver_filename, options=options)
 
     if verbose: print('...waiting for page to load')
@@ -88,8 +87,9 @@ def download_tile(zipf, download=False, product='LIDAR Point Cloud',
     if year == 'latest':
         xY = ['//*[@id="yearSelect"]/option[1]']
     elif not all_years:
-        if year not in years: raise Exception('no data for {}. Avialable years:'.format(year, ', '.join(years)))
-        xY = ['//*[@id="yearSelect"]/option[{}]'.format(years.index(year) + 1)]
+        if year not in years: 
+            raise Exception('no data for {}. Avialable years: {}'.format(year[0], ', '.join(years)))
+        xY = ['//*[@id="yearSelect"]/option[{}]'.format(years.index(str(year)) + 1)]
     else:
         most_recent = int(years[0])
         available_years = [str(y) for y in range(int(year), most_recent + 1) if str(y) in years]
@@ -114,6 +114,8 @@ def download_tile(zipf, download=False, product='LIDAR Point Cloud',
             except:
                 if verbose and not print_only: print(linki - 1, 'files downloaded for {}'.format(current))
                 break
+                
+    return driver
                 
                 
 class DownloadProgressBar(tqdm):
@@ -154,22 +156,23 @@ def tile_input(shp, args):
             gp.GeoDataFrame(geometry=[osgb.loc[idx].geometry]).to_file(tile_tmp + '.shp')
             with ZipFile(os.path.join(args.tmp_d, tile_tmp + '.zip'), 'w') as zipObj: 
                 [zipObj.write(f) for f in glob.glob(tile_tmp + '*')]
-            download_tile(tile_tmp + '.zip',
-                          product=args.product,
-                          headerless=False,
-                          year=args.year,
-                          all_years=args.all_years,
-                          browser=args.browser,
-                          verbose=args.verbose)
+            driver = download_tile(tile_tmp + '.zip',
+                                   product=args.product,
+                                   headless=True,
+                                   year=args.year,
+                                   all_years=args.all_years,
+                                   browser=args.browser,
+                                   verbose=args.verbose)
+            if not args.open_browser: driver.close()
             break
-    driver.close()
+            
     
 
 if __name__ == '__main__':
     
     # some arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('extent', type=str, nargs=1, help='path to extent')
+    parser.add_argument('extent', type=str, help='path to extent')
     parser.add_argument('--print-only', action='store_true', help='print list of available data')
     parser.add_argument('--odir', type=str, nargs=1, help='directory to store tiles')
     parser.add_argument('--product', '-p', type=str, default='LIDAR Composite DTM',
@@ -178,38 +181,39 @@ if __name__ == '__main__':
                                           "LIDAR Tiles DTM", "National LIDAR Programme DSM", \
                                           "National LIDAR Programme DTM", "National LIDAR Programme First Return DSM", \
                                           "National LIDAR Programme Point Cloud"')
-    parser.add_argument('--year', type=str, nargs=1, default='latest', help='directory to store tiles')
+    parser.add_argument('--year', type=str, default='latest', help='directory to store tiles')
     parser.add_argument('--all-years', action='store_true', help='download all available years between --year and latest')
-    parser.add_argument('--open-browser', action='store_false', help='opne chrome instance i.e. do not run headless')
-    parser.add_argument('--browser', type=str, default='chrome', help='opne chrome instance i.e. do not run headless')
+    parser.add_argument('--open-browser', action='store_false', help='open browser i.e. do not run headless')
+    parser.add_argument('--browser', type=str, default='chrome', help='choose between chrome and firefox')
     parser.add_argument('--verbose', action='store_true', help='print something')
     args = parser.parse_args()
-    args.extent = args.extent[0]
+#     args.extent = args.extent[0]
     
-    if args.verbose and args.print_only: print('PRINT ONLY')
+    if args.verbose and args.print_only: print('PRINT ONLY - no data will be downloaded')
 
     # temp directory
     args.tmp_d = tempfile.mkdtemp()
     args.tmp_n = str(uuid.uuid4())
-    if args.verbose: print('tmp dir:', args.tmp_d)
 
     shp = gp.read_file(args.extent)
     
-    if shp.area.values[0] > 10000 or num_vertics(shp) > 1000:
+    if shp.area.values[0] > 10*5000**2 or num_vertices(shp) > 1000:
         if args.verbose: 'input geometry is large and or complex, tiling data.'
         tile_input(shp, args)
     else:
-        
         with ZipFile(os.path.join(args.tmp_d, args.tmp_n + '.zip'), 'w') as zipObj: 
             [zipObj.write(f) for f in glob.glob(os.path.splitext(args.extent)[0] + '*')]
-        
-        if args.verbose: print('zip saved to:',  os.path.join(args.tmp_d, args.tmp_n + '.zip'))
 
-        download_tile(os.path.join(args.tmp_d, tmp_n + '.zip'),
+        download_tile(os.path.join(args.tmp_d, args.tmp_n + '.zip'),
+                      print_only=args.print_only,
+                      year=args.year,
+                      all_years=args.all_years,
                       product=args.product,
-                      headerless=args.open_browser,
+                      headless=args.open_browser,
                       browser=args.browser,
                       verbose=args.verbose)
+        
+        if not args.open_browser: driver.close()
     
     
 
