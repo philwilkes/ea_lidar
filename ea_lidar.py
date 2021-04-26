@@ -1,4 +1,4 @@
-import os
+
 import uuid
 import shutil
 import glob
@@ -176,7 +176,7 @@ def tile_input(shp, args):
                                    browser=args.browser,
                                    verbose=args.verbose)
 #             if not args.open_browser: driver.close()
-            break
+#            break
             
     
 
