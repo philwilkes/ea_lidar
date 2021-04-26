@@ -24,6 +24,8 @@ def download_tile(zipf, download=False, product_list=[],
                   verbose=True, download_dir=False, headless=True,
                   browser='chrome', year='latest', all_years=False,
                   print_only=True):
+
+    print(download_dir)
     
     if browser == 'firefox':
         from selenium.webdriver.firefox.options import Options
@@ -51,7 +53,7 @@ def download_tile(zipf, download=False, product_list=[],
 
     if verbose: print('...waiting for page to load')
     driver.get("https://environment.data.gov.uk/DefraDataDownload/?Mode=survey")
-    wait = WebDriverWait(driver, 50)
+    wait = WebDriverWait(driver, 300)
 
     if verbose: print('...waiting for shapefile to load')
     wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#fileid")))
@@ -221,14 +223,15 @@ if __name__ == '__main__':
         with ZipFile(os.path.join(args.tmp_d, args.tmp_n + '.zip'), 'w') as zipObj: 
             [zipObj.write(f) for f in glob.glob(os.path.splitext(args.extent)[0] + '*')]
 
-        download_tile(os.path.join(args.tmp_d, args.tmp_n + '.zip'),
-                      print_only=args.print_only,
-                      year=args.year,
-                      all_years=args.all_years,
-                      product_list=args.required_products,
-                      headless=args.open_browser,
-                      browser=args.browser,
-                      verbose=args.verbose)
+        driver = download_tile(os.path.join(args.tmp_d, args.tmp_n + '.zip'),
+                     		   download_dir=args.odir[0],
+					 		   print_only=args.print_only,
+                     		   year=args.year,
+                     		   all_years=args.all_years,
+                     		   product_list=args.required_products,
+                     		   headless=args.open_browser,
+                     		   browser=args.browser,
+                     		   verbose=args.verbose)
         
         if not args.open_browser: driver.close()
     
