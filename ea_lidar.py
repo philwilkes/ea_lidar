@@ -1,4 +1,4 @@
-
+import os
 import uuid
 import shutil
 import glob
@@ -14,7 +14,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 
-from selenium.common.exceptions import ElementNotInteractableException, TimeoutException
+from selenium.common.exceptions import NoSuchElementException, ElementNotInteractableException, TimeoutException
 
 import urllib.request
 from tqdm.auto import tqdm
@@ -24,8 +24,6 @@ def download_tile(zipf, download=False, product_list=[],
                   verbose=True, download_dir=False, headless=True,
                   browser='chrome', year='latest', all_years=False,
                   print_only=True):
-
-    print(download_dir)
     
     if browser == 'firefox':
         from selenium.webdriver.firefox.options import Options
@@ -53,18 +51,19 @@ def download_tile(zipf, download=False, product_list=[],
 
     if verbose: print('...waiting for page to load')
     driver.get("https://environment.data.gov.uk/DefraDataDownload/?Mode=survey")
-    wait = WebDriverWait(driver, 300)
+    wait = WebDriverWait(driver, 120)
 
     if verbose: print('...waiting for shapefile to load')
     wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#fileid")))
     driver.find_element_by_css_selector("#fileid").send_keys([zipf])
    
     wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".grid-item-container")))
-    try:
-        wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".grid-item-container")))
-    except TimeoutException:
-        if driver.find_element_by_css_selector( 'div.errorsContainer:nth-child(1)').is_displayed():
-            raise Exception("The AOI Polygon uploaded exceeds the maximum number of vertices allowed. Use a less complex polygon The maximum vertex count is : 1000")
+    wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".grid-item-container")))
+#    try:
+#        wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".grid-item-container")))
+#    except TimeoutException:
+#        if driver.find_element_by_css_selector( 'div.errorsContainer:nth-child(1)').is_displayed():
+#            raise Exception("The AOI Polygon uploaded exceeds the maximum number of vertices allowed. Use a less complex polygon The maximum vertex count is : 1000")
     E1 = driver.find_element_by_css_selector(".grid-item-container")
 
     if verbose: print('...waiting for available products to load') 
@@ -113,16 +112,19 @@ def download_tile(zipf, download=False, product_list=[],
                 while True:
                     try:
                         href = driver.find_element_by_css_selector('.data-ready-container > a:nth-child({})'.format(linki)).get_attribute("href")
-                        file_loc = os.path.join(os.path.split(zipf)[0] if not download_dir else download_dir,
+                        file_loc = os.path.join(os.path.split(zipf[0])[0] if not download_dir else download_dir,
                                                 href.split('/')[-1])
+                        print(download_dir, file_loc)
                         if print_only: 
                             print(href)
                         else:
                             if not os.path.isfile(file_loc): download_url(href, file_loc)
                         linki += 1
-                    except:
+                    except NoSuchElementException:
                         if verbose and not print_only: print(linki - 1, 'files downloaded for {}'.format(current))
                         break
+                    except Exception as err:
+                        print(err)
                 
     return driver
                 
@@ -169,14 +171,16 @@ def tile_input(shp, args):
             with ZipFile(os.path.join(args.tmp_d, tile_tmp + '.zip'), 'w') as zipObj: 
                 [zipObj.write(f) for f in glob.glob(tile_tmp + '*')]
             driver = download_tile(tile_tmp + '.zip',
+                                   print_only=args.print_only,
                                    product_list=args.required_products,
                                    headless=True,
                                    year=args.year,
                                    all_years=args.all_years,
+                                   download_dir=args.odir,
                                    browser=args.browser,
                                    verbose=args.verbose)
-#             if not args.open_browser: driver.close()
-#            break
+            if not args.open_browser: driver.close()
+            #break
             
     
 
@@ -186,8 +190,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('extent', type=str, help='path to extent')
     parser.add_argument('--print-only', action='store_true', help='print list of available data')
-    parser.add_argument('--odir', type=str, nargs=1, help='directory to store tiles')
-    parser.add_argument('--year', type=str, default='latest', help='directory to store tiles')
+    parser.add_argument('--odir', default=False, help='directory to store tiles')
+    parser.add_argument('--year', type=str, default='latest', help='specify year data captured')
     parser.add_argument('--all-years', action='store_true', help='download all available years between --year and latest')
     parser.add_argument('--open-browser', action='store_false', help='open browser i.e. do not run headless')
     parser.add_argument('--browser', type=str, default='chrome', help='choose between chrome and firefox')
@@ -204,6 +208,9 @@ if __name__ == '__main__':
     parser.add_argument('--dtm', action='store_true', help='download dtm')
     
     args = parser.parse_args()
+    if len(args.odir) > 0:
+        args.odir = os.path.abspath(args.odir)
+    print(args.odir)
 
     products = ["LIDAR Composite DSM", "LIDAR Composite DTM", "LIDAR Point Cloud"]
     args.required_products = [p for (p, b) in zip(products, [args.dsm, args.dtm, args.point_cloud]) if b]
@@ -216,26 +223,37 @@ if __name__ == '__main__':
 
     shp = gp.read_file(args.extent)
     
-    if shp.area.values[0] > 20*5000**2 or num_vertices(shp) > 1000:
+    if shp.area.values[0] > 561333677:        
         if args.verbose: 'input geometry is large and or complex, tiling data.'
         tile_input(shp, args)
-    else:
-        with ZipFile(os.path.join(args.tmp_d, args.tmp_n + '.zip'), 'w') as zipObj: 
-            [zipObj.write(f) for f in glob.glob(os.path.splitext(args.extent)[0] + '*')]
 
-        driver = download_tile(os.path.join(args.tmp_d, args.tmp_n + '.zip'),
-                     		   download_dir=args.odir[0],
-					 		   print_only=args.print_only,
-                     		   year=args.year,
-                     		   all_years=args.all_years,
-                     		   product_list=args.required_products,
-                     		   headless=args.open_browser,
-                     		   browser=args.browser,
-                     		   verbose=args.verbose)
-        
-        if not args.open_browser: driver.close()
+    print(num_vertices(shp))
+    if num_vertices(shp) > 1000:
+        if args.verbose: print('simplifying to <1000 vertices') 
+        simp = 10
     
-    
+        while num_vertices(shp) > 1000:
+            shp.geometry = shp.simplify(simp)
+            simp *= 2
 
+        shp.to_file(os.path.join(args.tmp_d, args.tmp_n + '.shp'))
+        args.extent = os.path.join(args.tmp_d, args.tmp_n + '.shp')
+        if args.verbose: print('simplified polygon saved to:', os.path.join(args.tmp_d, args.tmp_n + '.shp'))    
+    print(num_vertices(shp))   
 
+ 
+    with ZipFile(os.path.join(args.tmp_d, args.tmp_n + '.zip'), 'w') as zipObj: 
+        [zipObj.write(f) for f in glob.glob(os.path.splitext(args.extent)[0] + '*') if not f.endswith('.zip')]
+        #[print(f) for f in glob.glob(os.path.splitext(args.extent)[0] + '*') if not f.endswith('.zip')]
 
+    driver = download_tile(os.path.join(args.tmp_d, args.tmp_n + '.zip'),
+                           print_only=args.print_only,
+                           year=args.year,
+                           all_years=args.all_years,
+                           product_list=args.required_products,
+                           download_dir=args.odir,
+                           headless=args.open_browser,
+                           browser=args.browser,
+                           verbose=args.verbose)
+
+    if not args.open_browser: driver.close()
