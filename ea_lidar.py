@@ -26,10 +26,11 @@ def download_tile(zipf, download=False, product_list=[],
                   print_only=True):
     
     if browser == 'firefox':
+        if verbose: print('using FIREFOX')
         from selenium.webdriver.firefox.options import Options
         # you may need to import these as well
-#         from selenium.webdriver.firefox.firefox_binary import FirefoxBinary
-#         from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+#        from selenium.webdriver.firefox.firefox_binary import FirefoxBinary
+#        from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
         
         options = Options()
         options.headless = headless
@@ -42,6 +43,7 @@ def download_tile(zipf, download=False, product_list=[],
 #                                    firefox_binary=binary)
         driver = webdriver.Firefox(options=options)
     else:
+        if verbose: print('using CHROME')
         from selenium.webdriver.chrome.options import Options
         import chromedriver_binary
         
@@ -51,7 +53,7 @@ def download_tile(zipf, download=False, product_list=[],
 
     if verbose: print('...waiting for page to load')
     driver.get("https://environment.data.gov.uk/DefraDataDownload/?Mode=survey")
-    wait = WebDriverWait(driver, 120)
+    wait = WebDriverWait(driver, 300)
 
     if verbose: print('...waiting for shapefile to load')
     wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#fileid")))
@@ -114,9 +116,8 @@ def download_tile(zipf, download=False, product_list=[],
                         href = driver.find_element_by_css_selector('.data-ready-container > a:nth-child({})'.format(linki)).get_attribute("href")
                         file_loc = os.path.join(os.path.split(zipf[0])[0] if not download_dir else download_dir,
                                                 href.split('/')[-1])
-                        print(download_dir, file_loc)
                         if print_only: 
-                            print(href)
+                            print('available:', href)
                         else:
                             if not os.path.isfile(file_loc): download_url(href, file_loc)
                         linki += 1
@@ -208,13 +209,13 @@ if __name__ == '__main__':
     parser.add_argument('--dtm', action='store_true', help='download dtm')
     
     args = parser.parse_args()
-    if len(args.odir) > 0:
-        args.odir = os.path.abspath(args.odir)
-    print(args.odir)
+    if args.odir: args.odir = os.path.abspath(args.odir)
 
     products = ["LIDAR Composite DSM", "LIDAR Composite DTM", "LIDAR Point Cloud"]
     args.required_products = [p for (p, b) in zip(products, [args.dsm, args.dtm, args.point_cloud]) if b]
-    
+    if not any(args.required_products):
+        raise Exception('pick one or more products using the --point-cloud, --dsm or --dtm flags')   
+ 
     if args.verbose and args.print_only: print('PRINT ONLY - no data will be downloaded')
 
     # temp directory
@@ -227,8 +228,7 @@ if __name__ == '__main__':
         if args.verbose: 'input geometry is large and or complex, tiling data.'
         tile_input(shp, args)
 
-    print(num_vertices(shp))
-    if num_vertices(shp) > 1000:
+    if num_vertices(shp) > 1000: # maximum number of vertics accepted by application
         if args.verbose: print('simplifying to <1000 vertices') 
         simp = 10
     
@@ -239,8 +239,6 @@ if __name__ == '__main__':
         shp.to_file(os.path.join(args.tmp_d, args.tmp_n + '.shp'))
         args.extent = os.path.join(args.tmp_d, args.tmp_n + '.shp')
         if args.verbose: print('simplified polygon saved to:', os.path.join(args.tmp_d, args.tmp_n + '.shp'))    
-    print(num_vertices(shp))   
-
  
     with ZipFile(os.path.join(args.tmp_d, args.tmp_n + '.zip'), 'w') as zipObj: 
         [zipObj.write(f) for f in glob.glob(os.path.splitext(args.extent)[0] + '*') if not f.endswith('.zip')]
