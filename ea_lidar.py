@@ -119,7 +119,9 @@ def download_tile(zipf, download=False, product_list=[],
                         if print_only: 
                             print('available:', href)
                         else:
-                            if not os.path.isfile(file_loc): download_url(href, file_loc)
+                            if not os.path.isfile(file_loc): 
+                                download_url(href, file_loc)
+                                if args.verbose: print('saved to:', file_loc)
                         linki += 1
                     except NoSuchElementException:
                         if verbose and not print_only: print(linki - 1, 'files downloaded for {}'.format(current))
@@ -171,6 +173,7 @@ def tile_input(shp, args):
             gp.GeoDataFrame(geometry=[osgb.loc[idx].geometry]).to_file(tile_tmp + '.shp')
             with ZipFile(os.path.join(args.tmp_d, tile_tmp + '.zip'), 'w') as zipObj: 
                 [zipObj.write(f) for f in glob.glob(tile_tmp + '*')]
+            if args.verbose: print('zip file saved to:', os.path.join(args.tmp_d, tile_tmp + '.zip'))	
             driver = download_tile(tile_tmp + '.zip',
                                    print_only=args.print_only,
                                    product_list=args.required_products,
@@ -211,7 +214,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     if args.odir: args.odir = os.path.abspath(args.odir)
 
-    products = ["LIDAR Composite DSM", "LIDAR Composite DTM", "LIDAR Point Cloud"]
+    products = ["LIDAR Tiles DSM", "LIDAR Tiles DTM", "LIDAR Point Cloud"]
     args.required_products = [p for (p, b) in zip(products, [args.dsm, args.dtm, args.point_cloud]) if b]
     if not any(args.required_products):
         raise Exception('pick one or more products using the --point-cloud, --dsm or --dtm flags')   
@@ -224,7 +227,7 @@ if __name__ == '__main__':
 
     shp = gp.read_file(args.extent)
     
-    if shp.area.values[0] > 561333677:        
+    if shp.area.values[0] > 561333677 or len(shp.explode()) > 1:        
         if args.verbose: 'input geometry is large and or complex, tiling data.'
         tile_input(shp, args)
 
@@ -239,12 +242,15 @@ if __name__ == '__main__':
         shp.to_file(os.path.join(args.tmp_d, args.tmp_n + '.shp'))
         args.extent = os.path.join(args.tmp_d, args.tmp_n + '.shp')
         if args.verbose: print('simplified polygon saved to:', os.path.join(args.tmp_d, args.tmp_n + '.shp'))    
- 
-    with ZipFile(os.path.join(args.tmp_d, args.tmp_n + '.zip'), 'w') as zipObj: 
-        [zipObj.write(f) for f in glob.glob(os.path.splitext(args.extent)[0] + '*') if not f.endswith('.zip')]
+
+    zipPath = os.path.join(args.odir, args.tmp_n + '.zip') 
+    with ZipFile(zipPath, 'w') as zipObj: 
+        [zipObj.write(f, os.path.basename(f)) for f in glob.glob(os.path.splitext(args.extent)[0] + '*') if not f.endswith('.zip')]
         #[print(f) for f in glob.glob(os.path.splitext(args.extent)[0] + '*') if not f.endswith('.zip')]
 
-    driver = download_tile(os.path.join(args.tmp_d, args.tmp_n + '.zip'),
+    if args.verbose: print('zip file saved to:', zipPath)
+
+    driver = download_tile(zipPath,
                            print_only=args.print_only,
                            year=args.year,
                            all_years=args.all_years,
