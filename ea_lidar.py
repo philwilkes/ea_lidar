@@ -194,7 +194,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('extent', type=str, help='path to extent')
     parser.add_argument('--print-only', action='store_true', help='print list of available data')
-    parser.add_argument('--odir', default=False, help='directory to store tiles')
+    parser.add_argument('--odir', default='.', help='directory to store tiles')
     parser.add_argument('--year', type=str, default='latest', help='specify year data captured')
     parser.add_argument('--all-years', action='store_true', help='download all available years between --year and latest')
     parser.add_argument('--open-browser', action='store_false', help='open browser i.e. do not run headless')
