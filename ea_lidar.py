@@ -45,11 +45,14 @@ def download_tile(zipf, download=False, product_list=[],
     else:
         if verbose: print('using CHROME')
         from selenium.webdriver.chrome.options import Options
+        from selenium.webdriver.chrome.service import Service
+        from webdriver_manager.chrome import ChromeDriverManager
         import chromedriver_binary
         
         options = Options()
         options.headless = headless
-        driver = webdriver.Chrome(chromedriver_binary.chromedriver_filename, options=options)
+        #driver = webdriver.Chrome(chromedriver_binary.chromedriver_filename, options=options)
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
 
     if verbose: print('...waiting for page to load')
     driver.get("https://environment.data.gov.uk/DefraDataDownload/?Mode=survey")
@@ -57,7 +60,8 @@ def download_tile(zipf, download=False, product_list=[],
 
     if verbose: print('...waiting for shapefile to load')
     wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#fileid")))
-    driver.find_element_by_css_selector("#fileid").send_keys([zipf])
+    driver.find_element(by=By.CSS_SELECTOR, value="#fileid").send_keys([zipf])
+
    
     wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".grid-item-container")))
     wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".grid-item-container")))
@@ -66,7 +70,7 @@ def download_tile(zipf, download=False, product_list=[],
 #    except TimeoutException:
 #        if driver.find_element_by_css_selector( 'div.errorsContainer:nth-child(1)').is_displayed():
 #            raise Exception("The AOI Polygon uploaded exceeds the maximum number of vertices allowed. Use a less complex polygon The maximum vertex count is : 1000")
-    E1 = driver.find_element_by_css_selector(".grid-item-container")
+    E1 = driver.find_element(by=By.CSS_SELECTOR, value=".grid-item-container")
 
     if verbose: print('...waiting for available products to load') 
     while True: # hack :(
@@ -77,7 +81,9 @@ def download_tile(zipf, download=False, product_list=[],
 
     wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "#productSelect")))
     products = [x.get_attribute('value') for x in 
-                 Select(driver.find_element_by_css_selector('#productSelect')).options]
+                 Select(driver.find_element(by=By.CSS_SELECTOR, value='#productSelect')).options]
+    print(products)
+
     
     for product in product_list:
         if product not in products:
@@ -85,9 +91,9 @@ def download_tile(zipf, download=False, product_list=[],
         else:
             xP = '//*[@id="productSelect"]/option[{}]'.format(products.index(product) + 1)
             wait.until(EC.presence_of_element_located((By.XPATH, xP)))
-            driver.find_element_by_xpath(xP).click()
+            driver.find_element(by=By.XPATH, value=xP).click()
 
-            years = [x.get_attribute('value') for x in Select(driver.find_element_by_css_selector('#yearSelect')).options]
+            years = [x.get_attribute('value') for x in Select(driver.find_element(by=By.CSS_SELECTOR, value='#yearSelect')).options]
             if year == 'latest':
                 xY = ['//*[@id="yearSelect"]/option[1]']
                 if verbose: print('downloading data for: {}'.format(years[int(xY[0].split('[')[-1][:-1]) - 1]))
@@ -109,11 +115,11 @@ def download_tile(zipf, download=False, product_list=[],
             for xYs in xY:
                 current = years[int(xYs.split('[')[-1][:-1]) - 1]
                 wait.until(EC.presence_of_element_located((By.XPATH, xYs)))
-                driver.find_element_by_xpath(xYs).click()
+                driver.find_element(by=By.XPATH, value=xYs).click()
                 linki = 1
                 while True:
                     try:
-                        href = driver.find_element_by_css_selector('.data-ready-container > a:nth-child({})'.format(linki)).get_attribute("href")
+                        href = driver.find_element(by=By.CSS_SELECTOR, value='.data-ready-container > a:nth-child({})'.format(linki)).get_attribute("href")
                         file_loc = os.path.join(os.path.split(zipf[0])[0] if not download_dir else download_dir,
                                                 href.split('/')[-1])
                         if print_only: 
@@ -208,14 +214,15 @@ if __name__ == '__main__':
 #                                           "National LIDAR Programme DTM", "National LIDAR Programme First Return DSM", \
 #                                           "National LIDAR Programme Point Cloud"')
     parser.add_argument('--point-cloud', '-pc', action='store_true', help='download point cloud')
+    parser.add_argument('--national', action='store_true', help='download point cloud')
     parser.add_argument('--dsm', action='store_true', help='download dsm')
     parser.add_argument('--dtm', action='store_true', help='download dtm')
     
     args = parser.parse_args()
     if args.odir: args.odir = os.path.abspath(args.odir)
 
-    products = ["LIDAR Tiles DSM", "LIDAR Tiles DTM", "LIDAR Point Cloud"]
-    args.required_products = [p for (p, b) in zip(products, [args.dsm, args.dtm, args.point_cloud]) if b]
+    products = ["LIDAR Tiles DSM", "LIDAR Tiles DTM", "LIDAR Point Cloud", "National LIDAR Programme Point Cloud"]
+    args.required_products = [p for (p, b) in zip(products, [args.dsm, args.dtm, args.point_cloud, args.national]) if b]
     if not any(args.required_products):
         raise Exception('pick one or more products using the --point-cloud, --dsm or --dtm flags')   
  
@@ -227,7 +234,7 @@ if __name__ == '__main__':
 
     shp = gp.read_file(args.extent)
     
-    if shp.area.values[0] > 561333677 or len(shp.explode()) > 1:        
+    if shp.area.values[0] > 561333677 or len(shp.explode(index_parts=True)) > 1:        
         if args.verbose: 'input geometry is large and or complex, tiling data.'
         tile_input(shp, args)
 
