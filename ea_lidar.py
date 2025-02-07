@@ -5,6 +5,7 @@ import glob
 import time
 import tempfile
 import geopandas as gp
+import numpy as np
 from zipfile import ZipFile
 import argparse
 
@@ -14,7 +15,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 
-from selenium.common.exceptions import NoSuchElementException, ElementNotInteractableException, TimeoutException
+from selenium.common.exceptions import NoSuchElementException, ElementNotInteractableException, TimeoutException, StaleElementReferenceException
 
 import urllib.request
 from tqdm.auto import tqdm
@@ -22,7 +23,7 @@ from tqdm.auto import tqdm
 
 def download_tile(zipf, download=False, product_list=[], 
                   verbose=True, download_dir=False, headless=True,
-                  browser='chrome', year='latest', all_years=False,
+                  browser='chrome', year='latest', resolution='smallest', all_years=False,
                   print_only=True):
     
     if browser == 'firefox':
@@ -52,57 +53,68 @@ def download_tile(zipf, download=False, product_list=[],
         options = Options()
         options.headless = headless
         #driver = webdriver.Chrome(chromedriver_binary.chromedriver_filename, options=options)
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+        #driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+        driver = webdriver.Chrome(executable_path=r'C:/Users/ee21ess/OneDrive - University of Leeds/Placement/chromedriver-win64/chromedriver-win64/chromedriver.exe')
 
     if verbose: print('...waiting for page to load')
-    driver.get("https://environment.data.gov.uk/DefraDataDownload/?Mode=survey")
+    #driver.get("https://environment.data.gov.uk/DefraDataDownload/?Mode=survey")
+    driver.get("https://environment.data.gov.uk/survey")
     wait = WebDriverWait(driver, 300)
 
+    # select upload files from drop down list
+    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "select.src__StyledSelect-sc-sgud4a-0.caJfrq")))
+    dropdown = Select(driver.find_element(By.CSS_SELECTOR,"select.src__StyledSelect-sc-sgud4a-0.caJfrq"))
+    dropdown.select_by_visible_text('Upload shapefile')
+
     if verbose: print('...waiting for shapefile to load')
-    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "#fileid")))
-    driver.find_element(by=By.CSS_SELECTOR, value="#fileid").send_keys([zipf])
+    # upload files
+    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input.src__StyledInput-sc-176u3do-0.koUZzt")))
+    driver.find_element(by=By.CSS_SELECTOR, value="input.src__StyledInput-sc-176u3do-0.koUZzt").send_keys([zipf])
 
    
-    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, ".grid-item-container")))
-    wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".grid-item-container")))
+    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "button.src__StyledButton-sc-19ocyxv-0.gRWgCC.download-button")))
+    wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "button.src__StyledButton-sc-19ocyxv-0.gRWgCC.download-button")))
 #    try:
 #        wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, ".grid-item-container")))
 #    except TimeoutException:
 #        if driver.find_element_by_css_selector( 'div.errorsContainer:nth-child(1)').is_displayed():
 #            raise Exception("The AOI Polygon uploaded exceeds the maximum number of vertices allowed. Use a less complex polygon The maximum vertex count is : 1000")
-    E1 = driver.find_element(by=By.CSS_SELECTOR, value=".grid-item-container")
+    E1 = driver.find_element(by=By.CSS_SELECTOR, value="button.src__StyledButton-sc-19ocyxv-0.gRWgCC.download-button")
 
     if verbose: print('...waiting for available products to load') 
     while True: # hack :(
         try:
             E1.click()
-        except ElementNotInteractableException as e:
+        except StaleElementReferenceException as e:
             break
 
-    wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "#productSelect")))
+    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.sc-6d83a994-0.fswiLB")))
     products = [x.get_attribute('value') for x in 
-                 Select(driver.find_element(by=By.CSS_SELECTOR, value='#productSelect')).options]
+                 Select(driver.find_element(by=By.CSS_SELECTOR, value="select.src__StyledSelect-sc-sgud4a-0.caJfrq")).options]
     print(products)
 
     
     for product in product_list:
         if product not in products:
-            print('product not available')
+            print(f'product {product} not available')
         else:
-            xP = '//*[@id="productSelect"]/option[{}]'.format(products.index(product) + 1)
-            wait.until(EC.presence_of_element_located((By.XPATH, xP)))
-            driver.find_element(by=By.XPATH, value=xP).click()
+            xP = "option[value='{}']".format(product)#(products.index(product) + 1)
+            #xP = "option[value='lidar_point_cloud']"
+            wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, xP)))
+            driver.find_element(by=By.CSS_SELECTOR, value=xP).click()
 
-            years = [x.get_attribute('value') for x in Select(driver.find_element(by=By.CSS_SELECTOR, value='#yearSelect')).options]
+            years = [x.get_attribute('value') for x in Select(driver.find_elements(by=By.CSS_SELECTOR, value='select.src__StyledSelect-sc-sgud4a-0.caJfrq')[1]).options]
+            print(years)
             if year == 'latest':
-                xY = ['//*[@id="yearSelect"]/option[1]']
-                if verbose: print('downloading data for: {}'.format(years[int(xY[0].split('[')[-1][:-1]) - 1]))
+                #xY = ['//*[@id="yearSelect"]/option[1]']
+                xY = ["option[value='{}']".format(years[0])] 
+                if verbose: print('downloading data for: {}'.format(years[0]))
             elif not all_years:
                 if year not in years: 
                     print('no {} data available for {}, available years are {}'.format(product, year, ', '.join(years)))
                     continue
 #                     raise YearError('Years available are {}'.format(years))
-                xY = ['//*[@id="yearSelect"]/option[{}]'.format(years.index(str(year)) + 1)]
+                xY = ["option[value='{}']".format(year)]
             else:
                 most_recent = int(years[0])
                 if most_recent < int(year): 
@@ -110,28 +122,74 @@ def download_tile(zipf, download=False, product_list=[],
                     print('no {} data available for {}, available years are {}'.format(product, year, ', '.join(years)))
                     continue
                 available_years = [str(y) for y in range(int(year), most_recent + 1) if str(y) in years]
-                xY = ['//*[@id="yearSelect"]/option[{}]'.format(years.index(y) + 1) for y in available_years]
+                xY = ["option[value='{}']".format(y) for y in available_years]
 
+    
             for xYs in xY:
-                current = years[int(xYs.split('[')[-1][:-1]) - 1]
-                wait.until(EC.presence_of_element_located((By.XPATH, xYs)))
-                driver.find_element(by=By.XPATH, value=xYs).click()
+                #current = years[int(xYs.split(',')[-1][:-1]) - 1]
+                wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, xYs)))
+                driver.find_element(by=By.CSS_SELECTOR, value=xYs).click()
+                current = driver.find_element(by=By.CSS_SELECTOR, value=xYs).text
+
+                # select resolution
+                
+                res_m = [x.get_attribute('value') for x in Select(driver.find_elements(by=By.CSS_SELECTOR, value='select.src__StyledSelect-sc-sgud4a-0.caJfrq')[2]).options]
+                print(res_m)
+                res = [float(r) for r in res_m]
+
+                if np.isnan(res[0]):
+                    if verbose: print('no resolution selection available')
+                    r = ''
+                
+                else:
+                    # smallest
+                    if resolution == 'smallest':
+                        r = np.min(res)
+                        if r< 1:
+                            r = f'{r}m'
+                        else:
+                            r = f'{int(r)}m'
+
+                    # biggest
+                    elif resolution == 'biggest':
+                        r = np.max(res)
+                        if r< 1:
+                            r = f'{r}m'
+                        else:
+                            r = f'{int(r)}m'
+
+                    # specified
+                    else:
+                        if float(resolution) not in res: 
+                            print('no {} data available in {}m resolution, available resolutions are {}'.format(product, resolution, ', '.join([r + 'm' for r in res_m])))
+                            continue
+                        r = f'{resolution}m'
+
+                    if verbose: print(f'Selected {r} resolution')
+                    xR = "option[value='{}']".format(r[:-1])
+                    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, xR)))
+                    driver.find_element(by=By.CSS_SELECTOR, value=xR).click()
+                
+
                 linki = 1
-                while True:
+                while linki > 0:
                     try:
-                        href = driver.find_element(by=By.CSS_SELECTOR, value='.data-ready-container > a:nth-child({})'.format(linki)).get_attribute("href")
-                        file_loc = os.path.join(os.path.split(zipf[0])[0] if not download_dir else download_dir,
-                                                href.split('/')[-1])
+                        # href = driver.find_element(by=By.CSS_SELECTOR, value='.data-ready-container > a:nth-child({})'.format(linki)).get_attribute("href")
+                        href = driver.find_element(by=By.CSS_SELECTOR, value="a#link-{}.src__Link-sc-1loawqx-0.bYULlK".format(linki-1)).get_attribute("href")
+                        file_loc = os.path.join(os.path.split(zipf[0])[0] if not download_dir else download_dir, product, href.split('/')[-1].split('?')[0] + f'_{current}_{r}.zip') 
                         if print_only: 
                             print('available:', href)
                         else:
+                            if download_dir and not os.path.exists(os.path.join(download_dir, product)):
+                                os.makedirs(os.path.join(download_dir, product))
                             if not os.path.isfile(file_loc): 
                                 download_url(href, file_loc)
-                                if args.verbose: print('saved to:', file_loc)
+                                if verbose: print('saved to:', file_loc)
+
                         linki += 1
                     except NoSuchElementException:
                         if verbose and not print_only: print(linki - 1, 'files downloaded for {}'.format(current))
-                        break
+                        linki = -1
                     except Exception as err:
                         print(err)
                 
@@ -149,7 +207,7 @@ class DownloadProgressBar(tqdm):
 def download_url(url, output_path):
     
     with DownloadProgressBar(unit='B', unit_scale=True,
-                             miniters=1, desc=url.split('/')[-1]) as t:
+                             miniters=1, desc=url.split('/')[-1].split('?')[0]) as t:
         urllib.request.urlretrieve(url, filename=output_path, reporthook=t.update_to)
 
         
@@ -193,35 +251,11 @@ def tile_input(shp, args):
             #break
             
     
-
-if __name__ == '__main__':
-   
-    # some arguments
-    parser = argparse.ArgumentParser()
-    parser.add_argument('extent', type=str, help='path to extent')
-    parser.add_argument('--print-only', action='store_true', help='print list of available data')
-    parser.add_argument('--odir', default='.', help='directory to store tiles')
-    parser.add_argument('--year', type=str, default='latest', help='specify year data captured')
-    parser.add_argument('--all-years', action='store_true', help='download all available years between --year and latest')
-    parser.add_argument('--open-browser', action='store_false', help='open browser i.e. do not run headless')
-    parser.add_argument('--browser', type=str, default='chrome', help='choose between chrome and firefox')
-    parser.add_argument('--verbose', action='store_true', help='print something')
-    
-#     parser.add_argument('--product', '-p', type=str, default='LIDAR Composite DTM',
-#                         help='choose from "LIDAR Composite DSM", "LIDAR Composite DTM", \
-#                                           "LIDAR Point Cloud", "LIDAR Tiles DSM", \
-#                                           "LIDAR Tiles DTM", "National LIDAR Programme DSM", \
-#                                           "National LIDAR Programme DTM", "National LIDAR Programme First Return DSM", \
-#                                           "National LIDAR Programme Point Cloud"')
-    parser.add_argument('--point-cloud', '-pc', action='store_true', help='download point cloud')
-    parser.add_argument('--national', action='store_true', help='download point cloud')
-    parser.add_argument('--dsm', action='store_true', help='download dsm')
-    parser.add_argument('--dtm', action='store_true', help='download dtm')
-    
-    args = parser.parse_args()
+def main(args):
     if args.odir: args.odir = os.path.abspath(args.odir)
 
-    products = ["LIDAR Tiles DSM", "LIDAR Tiles DTM", "LIDAR Point Cloud", "National LIDAR Programme Point Cloud"]
+    #products = ["LIDAR Tiles DSM", "LIDAR Tiles DTM", "LIDAR Point Cloud", "National LIDAR Programme Point Cloud"]
+    products = ["lidar_tiles_dsm", "lidar_tiles_dtm", "lidar_point_cloud", "national_lidar_programme_point_cloud"]
     args.required_products = [p for (p, b) in zip(products, [args.dsm, args.dtm, args.point_cloud, args.national]) if b]
     if not any(args.required_products):
         raise Exception('pick one or more products using the --point-cloud, --dsm or --dtm flags')   
@@ -261,10 +295,45 @@ if __name__ == '__main__':
                            print_only=args.print_only,
                            year=args.year,
                            all_years=args.all_years,
+                           resolution=args.resolution,
                            product_list=args.required_products,
                            download_dir=args.odir,
                            headless=args.open_browser,
                            browser=args.browser,
                            verbose=args.verbose)
 
+    os.unlink(zipPath)
+    print('temp zip file deleted')
+
     if not args.open_browser: driver.close()
+    
+    
+if __name__ == '__main__':
+   
+    # some arguments
+    parser = argparse.ArgumentParser()
+    parser.add_argument('extent', type=str, help='path to extent')
+    parser.add_argument('--print-only', action='store_true', help='print list of available data')
+    parser.add_argument('--odir', default='.', help='directory to store tiles')
+    parser.add_argument('--year', type=str, default='latest', help='specify year data captured')
+    parser.add_argument('--resolution', type=str, default='smallest', help='specify resolution of data')
+    parser.add_argument('--all-years', action='store_true', help='download all available years between --year and latest')
+    parser.add_argument('--open-browser', action='store_false', help='open browser i.e. do not run headless')
+    parser.add_argument('--browser', type=str, default='chrome', help='choose between chrome and firefox')
+    parser.add_argument('--verbose', action='store_true', help='print something')
+    
+#     parser.add_argument('--product', '-p', type=str, default='LIDAR Composite DTM',
+#                         help='choose from "LIDAR Composite DSM", "LIDAR Composite DTM", \
+#                                           "LIDAR Point Cloud", "LIDAR Tiles DSM", \
+#                                           "LIDAR Tiles DTM", "National LIDAR Programme DSM", \
+#                                           "National LIDAR Programme DTM", "National LIDAR Programme First Return DSM", \
+#                                           "National LIDAR Programme Point Cloud"')
+    parser.add_argument('--point-cloud', '-pc', action='store_true', help='download point cloud')
+    parser.add_argument('--national', action='store_true', help='download point cloud')
+    parser.add_argument('--dsm', action='store_true', help='download dsm')
+    parser.add_argument('--dtm', action='store_true', help='download dtm')
+    
+    args = parser.parse_args()
+
+    main(args)
+    

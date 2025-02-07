@@ -13,6 +13,7 @@ optional arguments:
   --odir ODIR         directory to store tiles
   --year YEAR         specify year data captured
   --all-years         download all available years between --year and latest
+  --resolution RES    specify the resolution of the data: smallest, largest or numerical value e.g. 2 for 2 m (default smallest)
   --open-browser      open browser i.e. do not run headless
   --browser BROWSER   choose between chrome and firefox (deffault chrome)
   --verbose           print something
