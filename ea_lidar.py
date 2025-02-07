@@ -53,8 +53,8 @@ def download_tile(zipf, download=False, product_list=[],
         options = Options()
         options.headless = headless
         #driver = webdriver.Chrome(chromedriver_binary.chromedriver_filename, options=options)
-        #driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
-        driver = webdriver.Chrome(executable_path=r'C:/Users/ee21ess/OneDrive - University of Leeds/Placement/chromedriver-win64/chromedriver-win64/chromedriver.exe')
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
+        
 
     if verbose: print('...waiting for page to load')
     #driver.get("https://environment.data.gov.uk/DefraDataDownload/?Mode=survey")
